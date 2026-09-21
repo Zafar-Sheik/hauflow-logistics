@@ -4,10 +4,10 @@ minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
 strictDepBuilds: true
 allowBuilds:
-  '@prisma/engines': set this to true or false
+  '@prisma/engines': false
   esbuild: true
   fsevents: true
-  prisma: set this to true or false
+  prisma: false
   sharp: true
   unrs-resolver: true
   workerd: true
