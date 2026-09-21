@@ -1,0 +1,22 @@
+import { paySettlement, updateSettlement, voidSettlement } from "@/app/actions/operations";
+import { ConfirmAction } from "@/components/confirm-action";
+import { CrudDialog } from "@/components/crud-dialog";
+import { Field, SelectField, TextAreaField } from "@/components/form-fields";
+import { EmptyState, Flash, PageHeader, StatusBadge } from "@/components/page-ui";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { requireUser } from "@/lib/auth";
+import { shortDate, zar } from "@/lib/format";
+import { prisma } from "@/lib/prisma";
+
+const statuses = [
+  { value: "AWAITING_DELIVERY", label: "Awaiting delivery" },
+  { value: "READY_TO_PAY", label: "Ready to pay" },
+  { value: "ON_HOLD", label: "On hold" },
+];
+
+export default async function SettlementsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
+  const user = await requireUser(); const params = await searchParams;
+  const settlements = await prisma.carrierSettlement.findMany({ where: { organizationId: user.organizationId }, include: { carrier: true, job: { include: { customer: true } } }, orderBy: { dueDate: "asc" } });
+  return <main className="mx-auto w-full max-w-[1500px] p-4 md:p-7"><PageHeader title="Carrier payments" description="Review, approve and record subcontractor settlements. New settlements are created automatically with jobs." /><Flash success={params.success} error={params.error} />{settlements.length ? <Card className="border-slate-200 shadow-none"><CardContent className="px-0"><Table><TableHeader><TableRow><TableHead className="pl-6">Settlement</TableHead><TableHead>Carrier</TableHead><TableHead>Job / customer</TableHead><TableHead>Due date</TableHead><TableHead>Amount</TableHead><TableHead>Banking</TableHead><TableHead>Status</TableHead><TableHead className="pr-6 text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{settlements.map((settlement) => <TableRow key={settlement.id}><TableCell className="pl-6"><p className="font-semibold">{settlement.settlementNumber}</p>{settlement.paymentReference && <p className="text-xs text-slate-500">Ref {settlement.paymentReference}</p>}</TableCell><TableCell>{settlement.carrier.name}</TableCell><TableCell><p>{settlement.job.jobNumber}</p><p className="text-xs text-slate-500">{settlement.job.customer.name}</p></TableCell><TableCell>{shortDate(settlement.dueDate)}</TableCell><TableCell className="font-semibold">{zar.format(Number(settlement.amount))}</TableCell><TableCell><StatusBadge status={settlement.carrier.bankVerifiedAt ? "VERIFIED" : "PENDING"} /></TableCell><TableCell><StatusBadge status={settlement.status} /></TableCell><TableCell className="pr-6"><div className="flex justify-end gap-1">{!["PAID", "VOID"].includes(settlement.status) && <CrudDialog mode="edit" title={`Edit ${settlement.settlementNumber}`} description="Update the amount, due date or payment hold." action={updateSettlement}><input type="hidden" name="id" value={settlement.id} /><Field name="amount" label="Amount (R)" type="number" min={0} step="0.01" defaultValue={Number(settlement.amount)} required /><Field name="dueDate" label="Due date" type="date" defaultValue={settlement.dueDate.toISOString().slice(0, 10)} required /><SelectField name="status" label="Status" defaultValue={settlement.status} options={statuses} /><TextAreaField name="holdReason" label="Hold reason / note" defaultValue={settlement.holdReason} className="sm:col-span-2" /></CrudDialog>}{settlement.status === "READY_TO_PAY" && <CrudDialog title={`Pay ${settlement.carrier.name}`} description="Record the completed bank payment. Verified banking is required." action={paySettlement} triggerLabel="Pay"><input type="hidden" name="id" value={settlement.id} /><Field name="paidDate" label="Payment date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /><Field name="paymentReference" label="Bank reference" required /></CrudDialog>}{settlement.status !== "VOID" && <ConfirmAction action={voidSettlement} id={settlement.id} title="Void this settlement?" description="The settlement remains in the audit trail. Owner or administrator permission is required." label="Void settlement" reason />}</div></TableCell></TableRow>)}</TableBody></Table></CardContent></Card> : <EmptyState title="No carrier settlements yet" description="A settlement is created automatically when the first subcontracted job is created." />}</main>;
+}

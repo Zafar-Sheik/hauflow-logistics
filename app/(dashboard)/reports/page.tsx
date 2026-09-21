@@ -1,0 +1,21 @@
+import { Banknote, CircleDollarSign, TrendingUp, WalletCards } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState, PageHeader } from "@/components/page-ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { requireUser } from "@/lib/auth";
+import { zar } from "@/lib/format";
+import { prisma } from "@/lib/prisma";
+
+export default async function ReportsPage() {
+  const user = await requireUser();
+  const [jobs, invoices, settlements] = await Promise.all([
+    prisma.job.findMany({ where: { organizationId: user.organizationId, status: { not: "CANCELLED" } }, include: { customer: true } }),
+    prisma.invoice.findMany({ where: { organizationId: user.organizationId, status: { not: "VOID" } }, include: { allocations: { include: { payment: true } } } }),
+    prisma.carrierSettlement.findMany({ where: { organizationId: user.organizationId, status: { not: "VOID" } } }),
+  ]);
+  const revenue = invoices.reduce((sum, i) => sum + Number(i.total), 0); const costs = settlements.reduce((sum, s) => sum + Number(s.amount), 0); const received = invoices.reduce((sum, i) => sum + i.allocations.filter((a) => a.payment.status === "ACTIVE").reduce((p, a) => p + Number(a.amount), 0), 0); const paidCarriers = settlements.filter((s) => s.status === "PAID").reduce((sum, s) => sum + Number(s.amount), 0);
+  const customerRows = new Map<string, { name: string; revenue: number; cost: number; jobs: number }>(); for (const job of jobs) { const row = customerRows.get(job.customerId) ?? { name: job.customer.name, revenue: 0, cost: 0, jobs: 0 }; row.revenue += Number(job.customerAmount); row.cost += Number(job.carrierAmount); row.jobs += 1; customerRows.set(job.customerId, row); }
+  return <main className="mx-auto w-full max-w-[1480px] p-4 md:p-7"><PageHeader title="Profitability reports" description="Revenue, subcontractor costs, cash movements and customer margin from live records." /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi title="Invoiced revenue" value={zar.format(revenue)} icon={<TrendingUp />} /><Kpi title="Carrier costs" value={zar.format(costs)} icon={<WalletCards />} /><Kpi title="Customer cash received" value={zar.format(received)} icon={<CircleDollarSign />} /><Kpi title="Gross margin" value={zar.format(revenue - costs)} icon={<Banknote />} /></div><Card className="mt-6 border-slate-200 shadow-none"><CardHeader><CardTitle className="text-base">Customer profitability</CardTitle></CardHeader><CardContent className={customerRows.size ? "px-0" : ""}>{customerRows.size ? <Table><TableHeader><TableRow><TableHead className="pl-6">Customer</TableHead><TableHead>Jobs</TableHead><TableHead>Job revenue</TableHead><TableHead>Carrier cost</TableHead><TableHead>Gross margin</TableHead><TableHead className="pr-6">Margin %</TableHead></TableRow></TableHeader><TableBody>{[...customerRows.values()].sort((a, b) => b.revenue - a.revenue).map((row) => <TableRow key={row.name}><TableCell className="pl-6 font-semibold">{row.name}</TableCell><TableCell>{row.jobs}</TableCell><TableCell>{zar.format(row.revenue)}</TableCell><TableCell>{zar.format(row.cost)}</TableCell><TableCell className="font-semibold text-emerald-700">{zar.format(row.revenue - row.cost)}</TableCell><TableCell className="pr-6">{row.revenue ? `${Math.round(((row.revenue - row.cost) / row.revenue) * 100)}%` : "0%"}</TableCell></TableRow>)}</TableBody></Table> : <EmptyState title="No reporting data yet" description="Customer profitability will appear once jobs and invoices are created." />}</CardContent></Card><p className="mt-4 text-xs text-slate-500">Carrier payments recorded: {zar.format(paidCarriers)}. Reports are an operational subledger and do not replace a general ledger.</p></main>;
+}
+
+function Kpi({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) { return <Card className="border-slate-200 shadow-none"><CardContent className="flex items-center justify-between p-5"><div><p className="text-sm text-slate-500">{title}</p><p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p></div><span className="grid size-10 place-items-center rounded-xl bg-slate-100 text-slate-700">{icon}</span></CardContent></Card>; }

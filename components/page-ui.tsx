@@ -1,0 +1,11 @@
+import { Inbox } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+export function PageHeader({ eyebrow = "Operations control", title, description, action }: { eyebrow?: string; title: string; description: string; action?: React.ReactNode }) { return <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#b97808]">{eyebrow}</p><h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{title}</h1><p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p></div>{action}</div>; }
+
+export function EmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) { return <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><div><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-500"><Inbox /></span><h2 className="mt-4 font-semibold text-slate-900">{title}</h2><p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{description}</p>{action && <div className="mt-5">{action}</div>}</div></div>; }
+
+export function StatusBadge({ status }: { status: string }) { const good = ["PAID", "CLOSED", "DELIVERED", "ACTIVE"].includes(status); const warn = ["SCHEDULED", "DRAFT", "READY_TO_PAY"].includes(status); const bad = ["OVERDUE", "VOID", "CANCELLED", "ON_HOLD"].includes(status); return <Badge variant="outline" className={cn("font-medium capitalize", good && "border-emerald-200 bg-emerald-50 text-emerald-700", warn && "border-amber-200 bg-amber-50 text-amber-700", bad && "border-rose-200 bg-rose-50 text-rose-700", !good && !warn && !bad && "border-sky-200 bg-sky-50 text-sky-700")}>{status.toLowerCase().replaceAll("_", " ")}</Badge>; }
+
+export function Flash({ success, error }: { success?: string; error?: string }) { if (!success && !error) return null; return <div className={cn("mb-5 rounded-xl border px-4 py-3 text-sm", success ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800")}>{success ?? (error === "permission" ? "You do not have permission to perform that action." : error)}</div>; }
