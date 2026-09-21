@@ -53,21 +53,55 @@ export async function withTransaction<T>(
   }
 }
 
+function parseDatabaseUrl(connectionString: string) {
+  const trimmed = connectionString.trim();
+
+  try {
+    const url = new URL(trimmed);
+    return {
+      host: url.hostname,
+      port: Number(url.port || 4000),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname.replace(/^\//, ""),
+    };
+  } catch (error) {
+    const match = trimmed.match(
+      /^mysql(?:2)?:\/\/(?:(.*?)(?::(.*?))?@)?([^/:]+)(?::(\d+))?\/([^?]+)(?:\?.*)?$/,
+    );
+
+    if (!match) {
+      throw new Error(
+        `DATABASE_URL is invalid. Use a full MySQL/TiDB DSN like mysql://user:password@host:4000/database?sslaccept=strict. Received: ${trimmed.slice(0, 80)}${trimmed.length > 80 ? "..." : ""}`,
+      );
+    }
+
+    const [, rawUser, rawPassword, host, portString, database] = match;
+    return {
+      host,
+      port: Number(portString || 4000),
+      user: rawUser ? decodeURIComponent(rawUser) : "",
+      password: rawPassword ? decodeURIComponent(rawPassword) : "",
+      database: database.replace(/\/+$/, ""),
+    };
+  }
+}
+
 function createClient() {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is not configured. Add your TiDB connection string to the deployment environment.",
     );
   }
 
-  const url = new URL(connectionString);
+  const parsed = parseDatabaseUrl(connectionString);
   const adapter = new PrismaMariaDb({
-    host: url.hostname,
-    port: Number(url.port || 4000),
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    database: url.pathname.replace(/^\//, ""),
+    host: parsed.host,
+    port: parsed.port,
+    user: parsed.user,
+    password: parsed.password,
+    database: parsed.database,
     ssl: true,
     connectionLimit: Number(process.env.DATABASE_CONNECTION_LIMIT ?? 5),
     connectTimeout: 15_000,
